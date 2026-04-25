@@ -27,3 +27,7 @@ Homepage = "https://github.com/OpenMOSS/MOSS-TTS"
 PublisherId = ""
 DisplayName = "MOSS-TTS"
 Icon = ""
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
