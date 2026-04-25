@@ -1,0 +1,29 @@
+[project]
+name = "comfyui-moss-tts"
+version = "0.1.0"
+description = "ComfyUI custom nodes for MOSS-TTS 1.7B zero-shot voice cloning"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = [
+    "transformers>=4.40",
+    "accelerate",
+    "torchaudio",
+    "librosa",
+    "soundfile",
+    "einops",
+    "omegaconf",
+    "sentencepiece",
+    "protobuf",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "pytest-mock"]
+
+[project.urls]
+Homepage = "https://github.com/OpenMOSS/MOSS-TTS"
+
+[tool.comfy]
+PublisherId = ""
+DisplayName = "MOSS-TTS"
+Icon = ""
