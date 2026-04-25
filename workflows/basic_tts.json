@@ -1,0 +1,54 @@
+{
+  "last_node_id": 4,
+  "last_link_id": 3,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "MOSSTTSLoader",
+      "pos": [50, 50],
+      "size": [320, 180],
+      "outputs": [{"name": "model", "type": "MOSS_TTS_MODEL", "links": [1]}],
+      "widgets_values": ["OpenMOSS-Team/MOSS-TTS-Local-Transformer", "auto", "fp16", "sdpa", true]
+    },
+    {
+      "id": 2,
+      "type": "MOSSTTSGenerate",
+      "pos": [420, 50],
+      "size": [380, 520],
+      "inputs": [
+        {"name": "model", "type": "MOSS_TTS_MODEL", "link": 1},
+        {"name": "voice", "type": "MOSS_TTS_VOICE", "link": null}
+      ],
+      "outputs": [
+        {"name": "audio", "type": "AUDIO", "links": [2]},
+        {"name": "status", "type": "STRING", "links": [3]}
+      ],
+      "widgets_values": [
+        "Hello! This is MOSS-TTS running in ComfyUI.",
+        "Balanced (16 RVQ)",
+        2500, 1.0, 0, 16, 1.5, 1.0, 50, 0.95, 0.95, 50, 1.1
+      ]
+    },
+    {
+      "id": 3,
+      "type": "SaveAudio",
+      "pos": [850, 50],
+      "size": [320, 100],
+      "inputs": [{"name": "audio", "type": "AUDIO", "link": 2}],
+      "widgets_values": ["moss_tts"]
+    },
+    {
+      "id": 4,
+      "type": "ShowText|pysssss",
+      "pos": [850, 200],
+      "size": [320, 200],
+      "inputs": [{"name": "text", "type": "STRING", "link": 3}]
+    }
+  ],
+  "links": [
+    [1, 1, 0, 2, 0, "MOSS_TTS_MODEL"],
+    [2, 2, 0, 3, 0, "AUDIO"],
+    [3, 2, 1, 4, 0, "STRING"]
+  ],
+  "version": 0.4
+}

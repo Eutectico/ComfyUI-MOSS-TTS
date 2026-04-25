@@ -1,0 +1,65 @@
+{
+  "last_node_id": 5,
+  "last_link_id": 4,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "LoadAudio",
+      "pos": [50, 50],
+      "size": [320, 100],
+      "outputs": [{"name": "AUDIO", "type": "AUDIO", "links": [1]}],
+      "widgets_values": ["reference_voice.wav"]
+    },
+    {
+      "id": 2,
+      "type": "MOSSTTSVoiceReference",
+      "pos": [50, 200],
+      "size": [320, 100],
+      "inputs": [{"name": "audio", "type": "AUDIO", "link": 1}],
+      "outputs": [{"name": "voice", "type": "MOSS_TTS_VOICE", "links": [2]}],
+      "widgets_values": [""]
+    },
+    {
+      "id": 3,
+      "type": "MOSSTTSLoader",
+      "pos": [50, 350],
+      "size": [320, 180],
+      "outputs": [{"name": "model", "type": "MOSS_TTS_MODEL", "links": [3]}],
+      "widgets_values": ["OpenMOSS-Team/MOSS-TTS-Local-Transformer", "auto", "fp16", "sdpa", true]
+    },
+    {
+      "id": 4,
+      "type": "MOSSTTSGenerate",
+      "pos": [420, 50],
+      "size": [380, 520],
+      "inputs": [
+        {"name": "model", "type": "MOSS_TTS_MODEL", "link": 3},
+        {"name": "voice", "type": "MOSS_TTS_VOICE", "link": 2}
+      ],
+      "outputs": [
+        {"name": "audio", "type": "AUDIO", "links": [4]},
+        {"name": "status", "type": "STRING", "links": null}
+      ],
+      "widgets_values": [
+        "Diese Stimme klingt wie die Referenz-Audio.",
+        "Balanced (16 RVQ)",
+        2500, 1.0, 0, 16, 1.5, 1.0, 50, 0.95, 0.95, 50, 1.1
+      ]
+    },
+    {
+      "id": 5,
+      "type": "SaveAudio",
+      "pos": [850, 50],
+      "size": [320, 100],
+      "inputs": [{"name": "audio", "type": "AUDIO", "link": 4}],
+      "widgets_values": ["moss_tts_cloned"]
+    }
+  ],
+  "links": [
+    [1, 1, 0, 2, 0, "AUDIO"],
+    [2, 2, 0, 4, 1, "MOSS_TTS_VOICE"],
+    [3, 3, 0, 4, 0, "MOSS_TTS_MODEL"],
+    [4, 4, 0, 5, 0, "AUDIO"]
+  ],
+  "version": 0.4
+}
