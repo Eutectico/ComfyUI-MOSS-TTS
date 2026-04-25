@@ -1,6 +1,6 @@
 """ComfyUI node: MOSSTTSLoader."""
 
-from lib.model_state import get_or_load
+from ..lib.model_state import get_or_load
 
 
 class MOSSTTSLoader:

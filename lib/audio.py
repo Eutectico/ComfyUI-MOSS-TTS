@@ -26,9 +26,13 @@ def audio_dict_to_wav(audio_dict: dict, dest_dir: str) -> str:
 
 
 def tts_output_to_audio_dict(audio: torch.Tensor, sample_rate: int) -> dict:
-    """Pack a 1D MOSS-TTS audio tensor into ComfyUI AUDIO format [1, 1, T]."""
+    """Pack a 1D MOSS-TTS audio tensor into ComfyUI AUDIO format [1, 1, T].
+
+    Always returns the tensor on CPU so downstream nodes don't need to handle GPU tensors.
+    """
     if audio.dim() != 1:
         raise ValueError(f"Expected 1D audio tensor, got shape {tuple(audio.shape)}")
+    audio = audio.detach().cpu()
     return {
         "waveform": audio.unsqueeze(0).unsqueeze(0),
         "sample_rate": int(sample_rate),

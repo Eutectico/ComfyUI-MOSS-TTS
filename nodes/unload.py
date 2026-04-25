@@ -1,6 +1,6 @@
 """ComfyUI node: MOSSTTSUnload."""
 
-from lib.model_state import cleanup_all
+from ..lib.model_state import cleanup_all
 
 
 class MOSSTTSUnload:

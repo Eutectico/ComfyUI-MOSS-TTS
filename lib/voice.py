@@ -4,7 +4,7 @@ import logging
 import os
 from typing import Optional
 
-from lib.audio import audio_dict_to_wav
+from .audio import audio_dict_to_wav
 
 log = logging.getLogger(__name__)
 

@@ -1,6 +1,6 @@
 """ComfyUI-MOSS-TTS — Custom nodes for MOSS-TTS 1.7B zero-shot voice cloning."""
 
-from nodes import (
+from .nodes import (
     MOSSTTSLoader,
     MOSSTTSVoiceReference,
     MOSSTTSGenerate,

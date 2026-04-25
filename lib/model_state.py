@@ -41,6 +41,13 @@ def resolve_dtype(requested: str, device: str) -> torch.dtype:
     }[requested]
 
 
+def _resolved_dtype_str(requested: str, device: str) -> str:
+    """Return the canonical dtype string ('fp16'/'bf16'/'fp32') for cache keying."""
+    if requested == "auto":
+        return "fp16" if device == "cuda" else "fp32"
+    return requested
+
+
 def resolve_attn_impl(requested: str, device: str) -> str:
     if requested == "auto":
         return "sdpa" if device == "cuda" else "eager"
@@ -74,7 +81,7 @@ def get_or_load(
     resolved_dtype = resolve_dtype(dtype_str, resolved_device)
     resolved_attn = resolve_attn_impl(attn_impl, resolved_device)
 
-    key = (model_id, resolved_device, dtype_str, resolved_attn)
+    key = (model_id, resolved_device, _resolved_dtype_str(dtype_str, resolved_device), resolved_attn)
     if key in _MODEL_CACHE:
         entry = _MODEL_CACHE[key]
         entry["keep_loaded"] = keep_loaded
@@ -135,3 +142,16 @@ def cleanup_all() -> str:
         free, total = torch.cuda.mem_get_info()
         return f"Cleared {n} cached model(s). Free VRAM: {free / 1024**3:.2f} GB / {total / 1024**3:.2f} GB"
     return f"Cleared {n} cached model(s)."
+
+
+def cleanup_one(key: tuple) -> bool:
+    """Remove a single cached entry by key. Returns True if found and dropped."""
+    if key not in _MODEL_CACHE:
+        return False
+    entry = _MODEL_CACHE.pop(key)
+    entry["model"] = None
+    entry["processor"] = None
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    return True

@@ -1,7 +1,7 @@
-from nodes.loader import MOSSTTSLoader
-from nodes.voice_reference import MOSSTTSVoiceReference
-from nodes.generate import MOSSTTSGenerate
-from nodes.unload import MOSSTTSUnload
+from .loader import MOSSTTSLoader
+from .voice_reference import MOSSTTSVoiceReference
+from .generate import MOSSTTSGenerate
+from .unload import MOSSTTSUnload
 
 __all__ = [
     "MOSSTTSLoader",

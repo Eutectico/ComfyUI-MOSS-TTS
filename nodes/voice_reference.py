@@ -2,7 +2,7 @@
 
 import os
 
-from lib.voice import build_voice_reference
+from ..lib.voice import build_voice_reference
 
 
 def _comfy_temp_dir() -> str:

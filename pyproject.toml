@@ -21,7 +21,7 @@ dependencies = [
 dev = ["pytest>=7", "pytest-mock"]
 
 [project.urls]
-Homepage = "https://github.com/OpenMOSS/MOSS-TTS"
+Homepage = "https://github.com/Eutectico/ComfyUI-MOSS-TTS"
 
 [tool.comfy]
 PublisherId = ""

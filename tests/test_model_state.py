@@ -92,3 +92,16 @@ def test_resolve_attn_impl_flash_falls_back_when_unavailable(monkeypatch):
 
     monkeypatch.setattr(builtins, "__import__", fake_import)
     assert model_state.resolve_attn_impl("flash_attention_2", "cuda") == "sdpa"
+
+
+def test_auto_dtype_collapses_with_explicit_on_same_device():
+    """auto and the matching explicit dtype should hit the same cache entry."""
+    auto_model_p, auto_proc_p = _patches()
+    with auto_model_p as MockModel, auto_proc_p as MockProc, \
+         patch("lib.model_state.torch.cuda.is_available", return_value=False):
+        MockModel.from_pretrained.return_value = MagicMock()
+        MockProc.from_pretrained.return_value = MagicMock()
+        e1 = model_state.get_or_load("x", "cpu", "auto", "eager")
+        e2 = model_state.get_or_load("x", "cpu", "fp32", "eager")
+        assert e1 is e2
+        assert MockModel.from_pretrained.call_count == 1

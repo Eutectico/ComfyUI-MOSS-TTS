@@ -6,11 +6,11 @@ import time
 import torch
 import torchaudio
 
-from lib.audio import tts_output_to_audio_dict
-from lib.delay_config import DelayGenerationConfig
-from lib.generation import build_layers_config, format_status
-from lib.model_state import cleanup_all
-from lib.presets import PRESET_NAMES, resolve_preset
+from ..lib.audio import tts_output_to_audio_dict
+from ..lib.delay_config import DelayGenerationConfig
+from ..lib.generation import build_layers_config, format_status
+from ..lib.model_state import cleanup_all
+from ..lib.presets import PRESET_NAMES, resolve_preset
 
 
 _DEFAULT_VOICE = {"path": None, "source": "none"}
