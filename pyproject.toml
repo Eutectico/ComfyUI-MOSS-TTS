@@ -30,5 +30,8 @@ Icon = ""
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--import-mode=importlib --ignore=__init__.py --ignore=nodes --ignore=lib --ignore=workflows"
-# sys.path setup happens in the root conftest.py — see comment there for why.
+addopts = "--import-mode=importlib --rootdir=tests --confcutdir=tests"
+# --rootdir=tests prevents pytest's discovery from walking up into the package
+# root and trying to import its __init__.py (which uses ComfyUI-style relative
+# imports that only resolve when ComfyUI's loader runs the package).
+# sys.path setup happens in tests/conftest.py.
