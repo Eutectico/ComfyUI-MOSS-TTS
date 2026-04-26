@@ -21,3 +21,17 @@ if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
 collect_ignore = ["__init__.py", "nodes", "lib", "workflows", "docs"]
+
+
+def pytest_ignore_collect(collection_path, config):
+    """Belt-and-suspenders: hard-block any attempt to collect __init__.py at rootdir.
+
+    `collect_ignore` alone hasn't been sufficient in practice — pytest's package
+    detection walks up from the test file and tries to import the parent package's
+    __init__.py before our conftest.py's collect_ignore is consulted. Returning
+    True here aborts that traversal explicitly.
+    """
+    name = collection_path.name if hasattr(collection_path, "name") else os.path.basename(str(collection_path))
+    if name == "__init__.py" and os.path.dirname(str(collection_path)) == _HERE:
+        return True
+    return None
