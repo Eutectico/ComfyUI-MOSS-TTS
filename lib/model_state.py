@@ -10,9 +10,25 @@ import logging
 from typing import Optional
 
 import torch
-from transformers import AutoModel, AutoProcessor
 
 log = logging.getLogger(__name__)
+
+
+def _get_auto_classes():
+    """Lazy-import transformers' AutoModel and AutoProcessor.
+
+    Why lazy: transformers' lazy loader transitively imports torchvision and
+    other heavy deps. In some ComfyUI environments torch and torchvision
+    versions are mismatched, which breaks the lazy chain at attribute access
+    even though transformers itself imports fine. Deferring this import to
+    runtime means our package stays importable; the failure surfaces only
+    when the user actually loads a model.
+
+    Tests can patch this single function to skip importing transformers
+    entirely.
+    """
+    from transformers import AutoModel, AutoProcessor
+    return AutoModel, AutoProcessor
 
 _MODEL_CACHE: dict[tuple, dict] = {}
 _ATEXIT_REGISTERED = False
@@ -91,6 +107,7 @@ def get_or_load(
              model_id, resolved_device, dtype_str, resolved_attn)
     _set_cuda_backends()
 
+    AutoModel, AutoProcessor = _get_auto_classes()
     processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
     if hasattr(processor, "audio_tokenizer") and processor.audio_tokenizer is not None:
         processor.audio_tokenizer = processor.audio_tokenizer.to(resolved_device)

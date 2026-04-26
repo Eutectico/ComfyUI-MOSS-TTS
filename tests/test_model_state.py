@@ -11,16 +11,24 @@ def clear_cache():
     model_state._MODEL_CACHE.clear()
 
 
-def _patches():
-    """Patch transformers AutoModel/AutoProcessor with magic mocks."""
-    auto_model = patch("lib.model_state.AutoModel")
-    auto_proc = patch("lib.model_state.AutoProcessor")
-    return auto_model, auto_proc
+def _patch_classes():
+    """Patch the lazy-import accessor with mocked AutoModel/AutoProcessor.
+
+    Returns the patch context, plus the mock classes so tests can configure
+    their `.from_pretrained` return values.
+    """
+    fake_model = MagicMock()
+    fake_proc = MagicMock()
+    return (
+        patch("lib.model_state._get_auto_classes", return_value=(fake_model, fake_proc)),
+        fake_model,
+        fake_proc,
+    )
 
 
 def test_get_or_load_creates_cache_entry():
-    auto_model_p, auto_proc_p = _patches()
-    with auto_model_p as MockModel, auto_proc_p as MockProc:
+    p, MockModel, MockProc = _patch_classes()
+    with p:
         MockModel.from_pretrained.return_value = MagicMock()
         MockProc.from_pretrained.return_value = MagicMock()
         entry = model_state.get_or_load(
@@ -34,8 +42,8 @@ def test_get_or_load_creates_cache_entry():
 
 
 def test_get_or_load_returns_cached_entry_on_second_call():
-    auto_model_p, auto_proc_p = _patches()
-    with auto_model_p as MockModel, auto_proc_p as MockProc:
+    p, MockModel, MockProc = _patch_classes()
+    with p:
         MockModel.from_pretrained.return_value = MagicMock()
         MockProc.from_pretrained.return_value = MagicMock()
         e1 = model_state.get_or_load("x", "cpu", "fp32", "eager")
@@ -45,8 +53,8 @@ def test_get_or_load_returns_cached_entry_on_second_call():
 
 
 def test_different_keys_create_distinct_entries():
-    auto_model_p, auto_proc_p = _patches()
-    with auto_model_p as MockModel, auto_proc_p as MockProc:
+    p, MockModel, MockProc = _patch_classes()
+    with p:
         MockModel.from_pretrained.side_effect = [MagicMock(), MagicMock()]
         MockProc.from_pretrained.side_effect = [MagicMock(), MagicMock()]
         e1 = model_state.get_or_load("x", "cpu", "fp32", "eager")
@@ -56,8 +64,8 @@ def test_different_keys_create_distinct_entries():
 
 
 def test_cleanup_all_clears_cache():
-    auto_model_p, auto_proc_p = _patches()
-    with auto_model_p as MockModel, auto_proc_p as MockProc:
+    p, MockModel, MockProc = _patch_classes()
+    with p:
         MockModel.from_pretrained.return_value = MagicMock()
         MockProc.from_pretrained.return_value = MagicMock()
         model_state.get_or_load("x", "cpu", "fp32", "eager")
@@ -96,9 +104,8 @@ def test_resolve_attn_impl_flash_falls_back_when_unavailable(monkeypatch):
 
 def test_auto_dtype_collapses_with_explicit_on_same_device():
     """auto and the matching explicit dtype should hit the same cache entry."""
-    auto_model_p, auto_proc_p = _patches()
-    with auto_model_p as MockModel, auto_proc_p as MockProc, \
-         patch("lib.model_state.torch.cuda.is_available", return_value=False):
+    p, MockModel, MockProc = _patch_classes()
+    with p, patch("lib.model_state.torch.cuda.is_available", return_value=False):
         MockModel.from_pretrained.return_value = MagicMock()
         MockProc.from_pretrained.return_value = MagicMock()
         e1 = model_state.get_or_load("x", "cpu", "auto", "eager")
