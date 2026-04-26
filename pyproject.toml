@@ -31,3 +31,4 @@ Icon = ""
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+addopts = "--import-mode=importlib --ignore=__init__.py --ignore=nodes --ignore=lib"
