@@ -137,6 +137,30 @@ def _resolved_dtype_str(requested: str, device: str) -> str:
     return requested
 
 
+def _fix_moss_model_config_token_ids(processor) -> None:
+    """Fill in missing pad_token_id / eos_token_id on processor.model_config.
+
+    MossTTSDelayConfig.__init__ assigns `self.pad_token_id = pad_token_id`
+    and then calls `super().__init__(**kwargs)`. The parent PretrainedConfig
+    initializer overwrites self.pad_token_id (and eos_token_id) back to None
+    when those keys aren't in kwargs. The repo's saved config.json only stores
+    these IDs inside `language_config`, not at the top level, so the fields
+    end up None on the loaded model_config — and MOSS-TTS' `_pad` later
+    crashes trying to assign None to a LongTensor.
+
+    Copy the values up from language_config when the top-level field is missing.
+    """
+    cfg = getattr(processor, "model_config", None)
+    if cfg is None:
+        return
+    lang = getattr(cfg, "language_config", None)
+    if lang is None:
+        return
+    for key in ("pad_token_id", "eos_token_id", "bos_token_id"):
+        if getattr(cfg, key, None) is None and getattr(lang, key, None) is not None:
+            setattr(cfg, key, getattr(lang, key))
+
+
 def resolve_attn_impl(requested: str, device: str) -> str:
     if requested == "auto":
         return "sdpa" if device == "cuda" else "eager"
@@ -182,6 +206,7 @@ def get_or_load(
 
     AutoModel, AutoProcessor = _get_auto_classes()
     processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
+    _fix_moss_model_config_token_ids(processor)
     if hasattr(processor, "audio_tokenizer") and processor.audio_tokenizer is not None:
         processor.audio_tokenizer = processor.audio_tokenizer.to(resolved_device)
 
