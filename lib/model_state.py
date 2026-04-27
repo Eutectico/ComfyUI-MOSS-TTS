@@ -134,6 +134,25 @@ _MODEL_CACHE: dict[tuple, dict] = {}
 _ATEXIT_REGISTERED = False
 
 
+class _ModelHandle(dict):
+    """Dict-compatible container for the loaded MOSS-TTS model + processor.
+
+    Inherits from dict so callers' [key] / .get() access patterns work, but
+    overrides __repr__ to return a short string. Without this, ComfyUI's
+    error reporter calls repr() on the workflow values, which hits
+    transformers.ProcessorMixin.__repr__ -> to_dict() -> deepcopy() of every
+    nested submodule including the audio_tokenizer's GPU weights — that
+    triggers a *second* OOM during error formatting and masks the real error.
+    """
+
+    def __repr__(self) -> str:
+        return (
+            f"<MOSS_TTS_MODEL device={self.get('device')!r} "
+            f"dtype={self.get('dtype')} attn={self.get('attn_impl')!r} "
+            f"id={self.get('model_id')!r}>"
+        )
+
+
 def _ensure_atexit():
     global _ATEXIT_REGISTERED
     if not _ATEXIT_REGISTERED:
@@ -288,15 +307,15 @@ def get_or_load(
         torch.cuda.empty_cache()
         gc.collect()
 
-    entry = {
-        "model": model,
-        "processor": processor,
-        "device": resolved_device,
-        "dtype": resolved_dtype,
-        "attn_impl": resolved_attn,
-        "model_id": model_id,
-        "keep_loaded": keep_loaded,
-    }
+    entry = _ModelHandle(
+        model=model,
+        processor=processor,
+        device=resolved_device,
+        dtype=resolved_dtype,
+        attn_impl=resolved_attn,
+        model_id=model_id,
+        keep_loaded=keep_loaded,
+    )
     _MODEL_CACHE[key] = entry
     return entry
 
