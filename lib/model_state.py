@@ -66,10 +66,16 @@ def _ensure_transformers_compat():
                 for name in dir(cls):
                     if not name.endswith("_class") or name.startswith("_"):
                         continue
+                    # Only DATA attributes count, not methods. ProcessorMixin's
+                    # `*_class` declarations are strings naming the expected
+                    # class (e.g. tokenizer_class = "AutoTokenizer"). Method
+                    # names like check_argument_for_proper_class also end in
+                    # "_class" but resolve to function objects — filter them.
+                    value = getattr(cls, name, None)
+                    if not isinstance(value, str):
+                        continue
                     attr = name[: -len("_class")]
                     if attr in cls.optional_attributes:
-                        continue
-                    if getattr(cls, name, None) is None:
                         continue
                     derived.append(attr)
                 if derived:
