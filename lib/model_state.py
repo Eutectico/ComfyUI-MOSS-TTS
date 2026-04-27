@@ -138,17 +138,31 @@ def _resolved_dtype_str(requested: str, device: str) -> str:
 
 
 def _fix_moss_model_config_token_ids(processor) -> None:
-    """Fill in missing pad_token_id / eos_token_id on processor.model_config.
+    """Make MossTTSDelayConfig's missing/None attrs fall through to language_config.
 
-    MossTTSDelayConfig.__init__ assigns `self.pad_token_id = pad_token_id`
-    and then calls `super().__init__(**kwargs)`. The parent PretrainedConfig
-    initializer overwrites self.pad_token_id (and eos_token_id) back to None
-    when those keys aren't in kwargs. The repo's saved config.json only stores
-    these IDs inside `language_config`, not at the top level, so the fields
-    end up None on the loaded model_config — and MOSS-TTS' `_pad` later
-    crashes trying to assign None to a LongTensor.
+    Two distinct issues with MOSS-TTS' MossTTSDelayConfig:
 
-    Copy the values up from language_config when the top-level field is missing.
+    1. `__init__` sets `self.pad_token_id = pad_token_id`, then calls
+       `super().__init__(**kwargs)` — and PretrainedConfig's initializer
+       reassigns self.pad_token_id (and eos_token_id, bos_token_id) to None
+       when those keys aren't in kwargs. The repo's saved config.json only
+       stores these IDs under `language_config`, so the top-level fields end
+       up None and MOSS-TTS' `_pad` crashes trying to assign None to a
+       LongTensor.
+
+    2. Many decoder-config attributes that transformers' generation/cache
+       machinery accesses (num_hidden_layers, num_attention_heads, head_dim,
+       max_position_embeddings, rope_*, etc.) live only on language_config —
+       MOSS-TTS only propagates hidden_size and vocab_size to the top level.
+       Accessing e.g. cfg.num_hidden_layers raises AttributeError and crashes
+       generate's cache init.
+
+    Fix:
+    - Explicitly overwrite None token_ids from language_config (case 1).
+    - Install a __getattr__ fallback on the config class that delegates any
+      otherwise-missing attribute lookup to language_config (case 2). This
+      catches num_hidden_layers and any future internal attr we haven't
+      anticipated, without us having to enumerate them all.
     """
     cfg = getattr(processor, "model_config", None)
     if cfg is None:
@@ -156,9 +170,29 @@ def _fix_moss_model_config_token_ids(processor) -> None:
     lang = getattr(cfg, "language_config", None)
     if lang is None:
         return
+
+    # Case 1: backfill None token_ids.
     for key in ("pad_token_id", "eos_token_id", "bos_token_id"):
         if getattr(cfg, key, None) is None and getattr(lang, key, None) is not None:
             setattr(cfg, key, getattr(lang, key))
+
+    # Case 2: install __getattr__ fallback on the class once.
+    cls = type(cfg)
+    if not getattr(cls, "_moss_tts_lang_attr_fallback_patched", False):
+        def _moss_lang_fallback(self, name):
+            # Avoid infinite recursion for the language_config attr itself.
+            if name == "language_config":
+                raise AttributeError(name)
+            lc = self.__dict__.get("language_config")
+            if lc is not None:
+                try:
+                    return getattr(lc, name)
+                except AttributeError:
+                    pass
+            raise AttributeError(name)
+
+        cls.__getattr__ = _moss_lang_fallback
+        cls._moss_tts_lang_attr_fallback_patched = True
 
 
 def resolve_attn_impl(requested: str, device: str) -> str:
