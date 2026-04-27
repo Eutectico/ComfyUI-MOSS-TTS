@@ -56,12 +56,19 @@ def _ensure_transformers_compat():
     # ProcessorMixin.__init__ to derive `attributes` for any subclass that
     # didn't set its own.
     pm = processing_utils.ProcessorMixin
-    if not getattr(pm, "_moss_tts_attributes_patched", False):
+    # Only install the attributes auto-derive shim on transformers releases that
+    # have the old `attributes` / `optional_attributes` data classvars. Newer
+    # releases (transformers 5.x+) have removed those entirely in favour of
+    # methods like get_attributes(); the shim has nothing to do there and
+    # touching the missing classvars would crash at module load.
+    has_old_attrs_api = "attributes" in vars(pm) or "optional_attributes" in vars(pm)
+    if has_old_attrs_api and not getattr(pm, "_moss_tts_attributes_patched", False):
         _orig_proc_init = pm.__init__
 
         def _patched_proc_init(self, *args, **kwargs):
             cls = type(self)
             if "attributes" not in cls.__dict__:  # subclass didn't override
+                opt_attrs = set(getattr(cls, "optional_attributes", None) or ())
                 derived = []
                 for name in dir(cls):
                     if not name.endswith("_class") or name.startswith("_"):
@@ -75,7 +82,7 @@ def _ensure_transformers_compat():
                     if not isinstance(value, str):
                         continue
                     attr = name[: -len("_class")]
-                    if attr in cls.optional_attributes:
+                    if attr in opt_attrs:
                         continue
                     derived.append(attr)
                 if derived:
