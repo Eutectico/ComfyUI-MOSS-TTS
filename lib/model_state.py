@@ -47,6 +47,37 @@ def _ensure_transformers_compat():
     # tokenizer model does subclass.
     if hasattr(processing_utils, "AUTO_TO_BASE_CLASS_MAPPING"):
         processing_utils.AUTO_TO_BASE_CLASS_MAPPING.setdefault("AutoModel", "PreTrainedModel")
+    # Newer transformers releases auto-derive ProcessorMixin.attributes from
+    # the subclass' `*_class` declarations. 4.57.6 still uses a hardcoded
+    # default of ["feature_extractor", "tokenizer"]. MOSS-TTS' processor only
+    # declares `tokenizer_class` and `audio_tokenizer_class` and never overrides
+    # `attributes`, so __init__ wrongly insists on a feature_extractor and
+    # crashes with "This processor requires 2 arguments". We monkey-patch
+    # ProcessorMixin.__init__ to derive `attributes` for any subclass that
+    # didn't set its own.
+    pm = processing_utils.ProcessorMixin
+    if not getattr(pm, "_moss_tts_attributes_patched", False):
+        _orig_proc_init = pm.__init__
+
+        def _patched_proc_init(self, *args, **kwargs):
+            cls = type(self)
+            if "attributes" not in cls.__dict__:  # subclass didn't override
+                derived = []
+                for name in dir(cls):
+                    if not name.endswith("_class") or name.startswith("_"):
+                        continue
+                    attr = name[: -len("_class")]
+                    if attr in cls.optional_attributes:
+                        continue
+                    if getattr(cls, name, None) is None:
+                        continue
+                    derived.append(attr)
+                if derived:
+                    cls.attributes = derived
+            _orig_proc_init(self, *args, **kwargs)
+
+        pm.__init__ = _patched_proc_init
+        pm._moss_tts_attributes_patched = True
 
 
 def _get_auto_classes():
