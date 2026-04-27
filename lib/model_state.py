@@ -15,22 +15,29 @@ log = logging.getLogger(__name__)
 
 
 def _ensure_transformers_compat():
-    """Patch transformers.processing_utils for MOSS-TTS' remote-code expectations.
+    """Patch the transformers namespace for MOSS-TTS' remote-code expectations.
 
-    MOSS-TTS' processor (loaded via trust_remote_code=True) does:
+    MOSS-TTS' processor and audio tokenizer (loaded via trust_remote_code=True)
+    target a future transformers API. Concretely:
 
-        from transformers import processing_utils
-        processing_utils.MODALITY_TO_BASE_CLASS_MAPPING["audio_tokenizer"] = "PreTrainedModel"
+      1. processing_moss_tts.py does:
+             processing_utils.MODALITY_TO_BASE_CLASS_MAPPING["audio_tokenizer"] = "PreTrainedModel"
+         The dict only exists in newer transformers releases.
 
-    `MODALITY_TO_BASE_CLASS_MAPPING` only exists in newer transformers releases.
-    Older releases that we still want to support don't have it, so MOSS-TTS'
-    line crashes with AttributeError. We ensure the dict exists so MOSS-TTS
-    can register its own modality without us having to pin a specific
-    transformers version.
+      2. configuration_moss_audio_tokenizer.py does:
+             from transformers.configuration_utils import PreTrainedConfig
+         Older releases call the same class `PretrainedConfig` (lowercase t).
+
+    Rather than pinning a specific transformers version (which would conflict
+    with whatever ComfyUI's other custom nodes need), we shim the missing
+    names. Both shims are no-ops on transformers releases that already have
+    the new API.
     """
-    from transformers import processing_utils
+    from transformers import processing_utils, configuration_utils
     if not hasattr(processing_utils, "MODALITY_TO_BASE_CLASS_MAPPING"):
         processing_utils.MODALITY_TO_BASE_CLASS_MAPPING = {}
+    if not hasattr(configuration_utils, "PreTrainedConfig") and hasattr(configuration_utils, "PretrainedConfig"):
+        configuration_utils.PreTrainedConfig = configuration_utils.PretrainedConfig
 
 
 def _get_auto_classes():
