@@ -1,5 +1,7 @@
 """ComfyUI node: MOSSTTSLoader."""
 
+import time
+
 from ..lib.model_state import get_or_load
 
 
@@ -26,6 +28,16 @@ class MOSSTTSLoader:
     RETURN_NAMES = ("model",)
     FUNCTION = "load"
     CATEGORY = "MOSS-TTS/loaders"
+
+    @classmethod
+    def IS_CHANGED(cls, model_id, device, dtype, attn_implementation, keep_loaded):
+        # When keep_loaded is False, the previous run's Generate node freed the
+        # model from the cache. ComfyUI's per-node output cache would otherwise
+        # hand the now-empty handle to Generate again. Returning a fresh value
+        # each call forces ComfyUI to re-execute load() and reload the model.
+        if not keep_loaded:
+            return time.time()
+        return f"{model_id}|{device}|{dtype}|{attn_implementation}|keep"
 
     def load(self, model_id, device, dtype, attn_implementation, keep_loaded):
         entry = get_or_load(
