@@ -38,6 +38,15 @@ def _ensure_transformers_compat():
         processing_utils.MODALITY_TO_BASE_CLASS_MAPPING = {}
     if not hasattr(configuration_utils, "PreTrainedConfig") and hasattr(configuration_utils, "PretrainedConfig"):
         configuration_utils.PreTrainedConfig = configuration_utils.PretrainedConfig
+    # MOSS-TTS' processor declares `audio_tokenizer_class = "AutoModel"`, but
+    # transformers' AUTO_TO_BASE_CLASS_MAPPING (which translates Auto* factory
+    # names to their base class for isinstance checks) doesn't include AutoModel
+    # in older releases. Without the mapping, the check resolves to the AutoModel
+    # factory itself — and MossAudioTokenizerModel is not a subclass of that.
+    # Adding the entry makes the check resolve to PreTrainedModel, which the
+    # tokenizer model does subclass.
+    if hasattr(processing_utils, "AUTO_TO_BASE_CLASS_MAPPING"):
+        processing_utils.AUTO_TO_BASE_CLASS_MAPPING.setdefault("AutoModel", "PreTrainedModel")
 
 
 def _get_auto_classes():
