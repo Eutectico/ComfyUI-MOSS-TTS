@@ -55,6 +55,26 @@ def _ensure_transformers_compat():
     # crashes with "This processor requires 2 arguments". We monkey-patch
     # ProcessorMixin.__init__ to derive `attributes` for any subclass that
     # didn't set its own.
+    # Restore _get_initial_cache_position on GenerationMixin. transformers 5.x
+    # removed this method in favour of new cache helpers, but MOSS-TTS' _sample
+    # still calls it as `self._get_initial_cache_position(cur_len, device, model_kwargs)`.
+    from transformers.generation.utils import GenerationMixin
+    if not hasattr(GenerationMixin, "_get_initial_cache_position"):
+        def _get_initial_cache_position(self, cur_len, device, model_kwargs):
+            if model_kwargs.get("cache_position") is None:
+                past_length = 0
+                past_key_values = model_kwargs.get("past_key_values")
+                if past_key_values is not None:
+                    try:
+                        past_length = past_key_values.get_seq_length()
+                    except (AttributeError, TypeError):
+                        past_length = 0
+                model_kwargs["cache_position"] = torch.arange(
+                    past_length, cur_len, device=device
+                )
+            return model_kwargs
+        GenerationMixin._get_initial_cache_position = _get_initial_cache_position
+
     pm = processing_utils.ProcessorMixin
     # Only install the attributes auto-derive shim on transformers releases that
     # have the old `attributes` / `optional_attributes` data classvars. Newer
