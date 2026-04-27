@@ -122,6 +122,21 @@ class MOSSTTSGenerate:
                 )
             gen_time = time.time() - t0
         except torch.cuda.OutOfMemoryError as e:
+            # Free intermediate tensors and (if keep_loaded is False) the whole
+            # model, so the next workflow run starts with a clean GPU instead
+            # of inheriting a stuck 13 GB allocation.
+            for var_name in ("input_ids", "attention_mask", "batch"):
+                if var_name in dir():
+                    pass
+            try:
+                del input_ids, attention_mask, batch
+            except UnboundLocalError:
+                pass
+            if not model.get("keep_loaded", True):
+                cleanup_all()
+            if device == "cuda":
+                torch.cuda.empty_cache()
+                gc.collect()
             raise torch.cuda.OutOfMemoryError(
                 f"OOM with max_tokens={max_tokens}, n_vq={params['n_vq']}. "
                 f"T4-class limits: 8 RVQ ~7200 tok, 16 RVQ ~4800 tok, "
