@@ -17,6 +17,20 @@ ComfyUI custom nodes for [MOSS-TTS](https://github.com/OpenMOSS/MOSS-TTS) — a 
 
 The first generation downloads ~13 GB of model weights from HuggingFace. Subsequent runs use the cached weights.
 
+### Transformers version
+
+MOSS-TTS' remote code (loaded via `trust_remote_code=True`) is calibrated for `transformers >= 4.50, < 4.58`. Earlier releases miss newer APIs the model expects (`MODALITY_TO_BASE_CLASS_MAPPING`, `PreTrainedConfig`); later releases (especially the 5.x line) have removed APIs the model still calls (`_get_initial_cache_position`, etc.). The package contains compatibility shims that paper over a few specific gaps, but staying inside the supported range produces the cleanest results.
+
+If the shipped audio sounds like noise rather than speech, the most common cause is that an unsupported transformers version is installed. Confirm with:
+```bash
+pip show transformers
+```
+and pin to a 4.5x version if needed.
+
+### Language support
+
+MOSS-TTS was trained primarily on Chinese. Without a voice reference, the default voice tends to render any input with Chinese-leaning phonetics — including English text. For English (or any non-Chinese language) output, supply a clean 5–15 second reference clip in the target language via the `MOSS-TTS Voice Reference` node.
+
 ## Nodes
 
 | Node | Category | Purpose |
