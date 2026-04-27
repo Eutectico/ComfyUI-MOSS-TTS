@@ -267,14 +267,31 @@ def get_or_load(
     dtype_str: str,
     attn_impl: str,
     keep_loaded: bool = True,
+    audio_tokenizer_device: str = "auto",
 ) -> dict:
-    """Load or fetch the cached MOSS-TTS model + processor."""
+    """Load or fetch the cached MOSS-TTS model + processor.
+
+    audio_tokenizer_device: where to place the audio_tokenizer (a separate
+        small model used to encode reference audio and decode generated codes).
+        "auto" mirrors the main model's device. "cpu" keeps it off the GPU,
+        saving ~1-3 GB of VRAM at the cost of some latency at the start and
+        end of each generation. Useful on memory-tight GPUs.
+    """
     _ensure_atexit()
     resolved_device = resolve_device(device)
     resolved_dtype = resolve_dtype(dtype_str, resolved_device)
     resolved_attn = resolve_attn_impl(attn_impl, resolved_device)
+    resolved_at_device = (
+        resolved_device if audio_tokenizer_device == "auto" else audio_tokenizer_device
+    )
 
-    key = (model_id, resolved_device, _resolved_dtype_str(dtype_str, resolved_device), resolved_attn)
+    key = (
+        model_id,
+        resolved_device,
+        _resolved_dtype_str(dtype_str, resolved_device),
+        resolved_attn,
+        resolved_at_device,
+    )
     if key in _MODEL_CACHE:
         entry = _MODEL_CACHE[key]
         entry["keep_loaded"] = keep_loaded
@@ -288,7 +305,7 @@ def get_or_load(
     processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
     _fix_moss_model_config_token_ids(processor)
     if hasattr(processor, "audio_tokenizer") and processor.audio_tokenizer is not None:
-        processor.audio_tokenizer = processor.audio_tokenizer.to(resolved_device)
+        processor.audio_tokenizer = processor.audio_tokenizer.to(resolved_at_device)
 
     if resolved_device == "cuda":
         torch.cuda.empty_cache()
