@@ -241,42 +241,6 @@ def _fix_moss_model_config_token_ids(processor) -> None:
         cls._moss_tts_lang_attr_fallback_patched = True
 
 
-def _cast_inputs_to_param_dtype_hook(module, args):
-    """Forward pre-hook: cast floating tensor inputs to module's param dtype.
-
-    AutoProcessor loads the audio_tokenizer in fp32. After we cast its weights
-    to fp16/bf16 to save VRAM, raw fp32 wav inputs flow through Linear/Conv
-    layers whose weights are now half-precision -> RuntimeError "expected
-    scalar type Float but found Half". The hook fires before each leaf
-    module's forward and aligns input dtype to the module's own parameters.
-    """
-    if not args:
-        return args
-    params = list(module.parameters(recurse=False))
-    if not params:
-        return args
-    target_dtype = params[0].dtype
-    new_args = tuple(
-        a.to(target_dtype)
-        if isinstance(a, torch.Tensor)
-        and a.is_floating_point()
-        and a.dtype != target_dtype
-        else a
-        for a in args
-    )
-    return new_args
-
-
-def _patch_audio_tokenizer_dtype(audio_tokenizer) -> None:
-    """Register the dtype-cast pre-hook on every leaf-ish module of the audio
-    tokenizer. Covers both encode (voice ref) and decode paths without
-    needing to know the model's submodule names.
-    """
-    for module in audio_tokenizer.modules():
-        if list(module.parameters(recurse=False)):
-            module.register_forward_pre_hook(_cast_inputs_to_param_dtype_hook)
-
-
 def resolve_attn_impl(requested: str, device: str) -> str:
     if requested == "auto":
         return "sdpa" if device == "cuda" else "eager"
@@ -341,18 +305,7 @@ def get_or_load(
     processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
     _fix_moss_model_config_token_ids(processor)
     if hasattr(processor, "audio_tokenizer") and processor.audio_tokenizer is not None:
-        # AutoProcessor.from_pretrained loads the audio_tokenizer in fp32
-        # regardless of how the main model is loaded. On a 20 GB GPU this
-        # alone pushes the working set past the headroom budget. Cast it to
-        # the model's dtype on cuda; on CPU keep default precision since
-        # fp16 ops are slow on most CPUs.
-        if resolved_at_device == "cuda":
-            processor.audio_tokenizer = processor.audio_tokenizer.to(
-                resolved_at_device, dtype=resolved_dtype
-            )
-            _patch_audio_tokenizer_dtype(processor.audio_tokenizer)
-        else:
-            processor.audio_tokenizer = processor.audio_tokenizer.to(resolved_at_device)
+        processor.audio_tokenizer = processor.audio_tokenizer.to(resolved_at_device)
 
     if resolved_device == "cuda":
         torch.cuda.empty_cache()
