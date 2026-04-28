@@ -7,6 +7,3 @@ einops
 omegaconf
 sentencepiece
 protobuf
-# Optional: only needed when MOSSTTSLoader.dtype = int8 (8-bit quantization
-# of the main LM via bitsandbytes — saves ~1.5 GB VRAM on a 1.7B param model).
-bitsandbytes

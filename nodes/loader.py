@@ -15,7 +15,7 @@ class MOSSTTSLoader:
                     {"default": "OpenMOSS-Team/MOSS-TTS-Local-Transformer", "multiline": False},
                 ),
                 "device": (["auto", "cuda", "cpu"], {"default": "auto"}),
-                "dtype": (["auto", "fp16", "bf16", "fp32", "int8"], {"default": "fp16"}),
+                "dtype": (["auto", "fp16", "bf16", "fp32"], {"default": "fp16"}),
                 "attn_implementation": (
                     ["auto", "sdpa", "flash_attention_2", "eager"],
                     {"default": "sdpa"},

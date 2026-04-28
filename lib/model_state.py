@@ -113,25 +113,6 @@ def _ensure_transformers_compat():
         pm._moss_tts_attributes_patched = True
 
 
-def _get_bnb_config():
-    """Lazy-build a BitsAndBytesConfig for 8-bit quantization.
-
-    bitsandbytes is an optional heavy dependency only needed when the user
-    selects dtype=int8. Importing it eagerly would make the package fail to
-    load on systems without bitsandbytes installed (it has CUDA-version
-    requirements). Raise a clear, actionable error instead.
-    """
-    try:
-        import bitsandbytes  # noqa: F401
-    except ImportError as e:
-        raise RuntimeError(
-            "int8 quantization requires the 'bitsandbytes' package. "
-            "Install it inside ComfyUI's Python env: pip install bitsandbytes"
-        ) from e
-    from transformers import BitsAndBytesConfig
-    return BitsAndBytesConfig(load_in_8bit=True)
-
-
 def _get_auto_classes():
     """Lazy-import transformers' AutoModel and AutoProcessor.
 
@@ -298,17 +279,7 @@ def get_or_load(
     """
     _ensure_atexit()
     resolved_device = resolve_device(device)
-    is_int8 = dtype_str == "int8"
-    if is_int8 and resolved_device != "cuda":
-        raise ValueError(
-            "dtype=int8 requires a cuda device — bitsandbytes 8-bit "
-            "quantization has no cpu backend."
-        )
-
-    if is_int8:
-        resolved_dtype = None
-    else:
-        resolved_dtype = resolve_dtype(dtype_str, resolved_device)
+    resolved_dtype = resolve_dtype(dtype_str, resolved_device)
     resolved_attn = resolve_attn_impl(attn_impl, resolved_device)
     resolved_at_device = (
         resolved_device if audio_tokenizer_device == "auto" else audio_tokenizer_device
@@ -340,27 +311,13 @@ def get_or_load(
         torch.cuda.empty_cache()
         gc.collect()
 
-    if is_int8:
-        # 8-bit quantization is wired through transformers' BitsAndBytesConfig.
-        # The model can't be moved post-load (.to()), so device placement has
-        # to go through device_map. The audio_tokenizer above stays fp32 — only
-        # the main LM gets quantized, which is where the bulk of weight memory
-        # lives and where 8-bit's quality loss is well-tolerated.
-        model = AutoModel.from_pretrained(
-            model_id,
-            trust_remote_code=True,
-            attn_implementation=resolved_attn,
-            quantization_config=_get_bnb_config(),
-            device_map={"": resolved_device},
-        )
-    else:
-        model = AutoModel.from_pretrained(
-            model_id,
-            trust_remote_code=True,
-            attn_implementation=resolved_attn,
-            torch_dtype=resolved_dtype,
-            low_cpu_mem_usage=True,
-        ).to(resolved_device)
+    model = AutoModel.from_pretrained(
+        model_id,
+        trust_remote_code=True,
+        attn_implementation=resolved_attn,
+        torch_dtype=resolved_dtype,
+        low_cpu_mem_usage=True,
+    ).to(resolved_device)
     model.eval()
 
     if resolved_device == "cuda":

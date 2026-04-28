@@ -112,32 +112,3 @@ def test_auto_dtype_collapses_with_explicit_on_same_device():
         e2 = model_state.get_or_load("x", "cpu", "fp32", "eager")
         assert e1 is e2
         assert MockModel.from_pretrained.call_count == 1
-
-
-def test_int8_uses_quantization_config_and_device_map():
-    """When dtype=int8, the main LM is loaded with a BitsAndBytesConfig and
-    device_map (no torch_dtype, no .to(device)) — that's how bitsandbytes
-    expects to be wired.
-    """
-    p, MockModel, MockProc = _patch_classes()
-    fake_bnb_config = MagicMock(name="BitsAndBytesConfig")
-    with p, patch("lib.model_state._get_bnb_config", return_value=fake_bnb_config):
-        MockModel.from_pretrained.return_value = MagicMock()
-        MockProc.from_pretrained.return_value = MagicMock()
-
-        model_state.get_or_load("x", "cuda", "int8", "sdpa")
-
-        kwargs = MockModel.from_pretrained.call_args.kwargs
-        assert kwargs.get("quantization_config") is fake_bnb_config
-        assert "device_map" in kwargs
-        assert "torch_dtype" not in kwargs
-
-
-def test_int8_rejects_cpu_device():
-    """bitsandbytes 8-bit quantization needs cuda kernels — fail clearly on cpu."""
-    p, MockModel, MockProc = _patch_classes()
-    with p:
-        MockModel.from_pretrained.return_value = MagicMock()
-        MockProc.from_pretrained.return_value = MagicMock()
-        with pytest.raises(ValueError, match="cuda"):
-            model_state.get_or_load("x", "cpu", "int8", "eager")
