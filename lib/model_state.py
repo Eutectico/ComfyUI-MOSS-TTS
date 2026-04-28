@@ -305,7 +305,17 @@ def get_or_load(
     processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
     _fix_moss_model_config_token_ids(processor)
     if hasattr(processor, "audio_tokenizer") and processor.audio_tokenizer is not None:
-        processor.audio_tokenizer = processor.audio_tokenizer.to(resolved_at_device)
+        # AutoProcessor.from_pretrained loads the audio_tokenizer in fp32
+        # regardless of how the main model is loaded. On a 20 GB GPU this
+        # alone pushes the working set past the headroom budget. Cast it to
+        # the model's dtype on cuda; on CPU keep default precision since
+        # fp16 ops are slow on most CPUs.
+        if resolved_at_device == "cuda":
+            processor.audio_tokenizer = processor.audio_tokenizer.to(
+                resolved_at_device, dtype=resolved_dtype
+            )
+        else:
+            processor.audio_tokenizer = processor.audio_tokenizer.to(resolved_at_device)
 
     if resolved_device == "cuda":
         torch.cuda.empty_cache()

@@ -112,3 +112,44 @@ def test_auto_dtype_collapses_with_explicit_on_same_device():
         e2 = model_state.get_or_load("x", "cpu", "fp32", "eager")
         assert e1 is e2
         assert MockModel.from_pretrained.call_count == 1
+
+
+def test_audio_tokenizer_cast_to_dtype_on_cuda():
+    """AutoProcessor loads the audio_tokenizer in fp32 by default. On cuda it
+    must be cast to the model's dtype (fp16/bf16) so it doesn't take ~2x VRAM.
+    """
+    import torch
+    p, MockModel, MockProc = _patch_classes()
+    with p:
+        fake_proc = MagicMock()
+        fake_at = MagicMock()
+        fake_proc.audio_tokenizer = fake_at
+        fake_at.to.return_value = fake_at
+        MockProc.from_pretrained.return_value = fake_proc
+        MockModel.from_pretrained.return_value = MagicMock()
+
+        model_state.get_or_load("x", "cuda", "fp16", "sdpa")
+
+        fake_at.to.assert_called_with("cuda", dtype=torch.float16)
+
+
+def test_audio_tokenizer_no_dtype_cast_on_cpu():
+    """When the audio_tokenizer is on CPU, do not force fp16 — fp16 ops are
+    slow on most CPUs and the VRAM concern doesn't apply off-GPU.
+    """
+    p, MockModel, MockProc = _patch_classes()
+    with p:
+        fake_proc = MagicMock()
+        fake_at = MagicMock()
+        fake_proc.audio_tokenizer = fake_at
+        fake_at.to.return_value = fake_at
+        MockProc.from_pretrained.return_value = fake_proc
+        MockModel.from_pretrained.return_value = MagicMock()
+
+        model_state.get_or_load(
+            "x", "cuda", "fp16", "sdpa", audio_tokenizer_device="cpu"
+        )
+
+        call = fake_at.to.call_args
+        assert call.args == ("cpu",)
+        assert "dtype" not in call.kwargs
