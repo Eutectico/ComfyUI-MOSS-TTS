@@ -241,6 +241,57 @@ def _fix_moss_model_config_token_ids(processor) -> None:
         cls._moss_tts_lang_attr_fallback_patched = True
 
 
+def _cast_inputs_to_param_dtype_hook(module, args):
+    """Forward pre-hook: align floating tensor inputs with the module's
+    parameter dtype.
+
+    Required when the audio_tokenizer runs in mixed precision (Linear/Conv
+    in fp16, LayerNorm in fp32, fp32 wav coming in from disk). Without this
+    every dtype boundary inside the network errors with "expected scalar
+    type Float but found Half" or similar.
+    """
+    if not args:
+        return args
+    params = list(module.parameters(recurse=False))
+    if not params:
+        return args
+    target_dtype = params[0].dtype
+    new_args = tuple(
+        a.to(target_dtype)
+        if isinstance(a, torch.Tensor)
+        and a.is_floating_point()
+        and a.dtype != target_dtype
+        else a
+        for a in args
+    )
+    return new_args
+
+
+def _patch_audio_tokenizer_mixed_precision(audio_tokenizer, target_dtype) -> None:
+    """Cast audio_tokenizer to target_dtype but keep normalization layers
+    in fp32 — they're precision-sensitive and a full fp16 cast collapses
+    near-zero statistics, producing silent audio on this model.
+
+    Also registers a forward pre-hook on every leaf-ish module that aligns
+    incoming float tensors with the module's own param dtype, so fp32 wav
+    inputs flow through fp16 Linears and fp16 hidden states reach the
+    fp32 norms without dtype-mismatch crashes.
+    """
+    norm_types = [torch.nn.LayerNorm, torch.nn.GroupNorm]
+    if hasattr(torch.nn, "RMSNorm"):
+        norm_types.append(torch.nn.RMSNorm)
+    norm_types = tuple(norm_types)
+
+    audio_tokenizer.to(dtype=target_dtype)
+    for module in audio_tokenizer.modules():
+        if isinstance(module, norm_types):
+            module.to(dtype=torch.float32)
+
+    for module in audio_tokenizer.modules():
+        if list(module.parameters(recurse=False)):
+            module.register_forward_pre_hook(_cast_inputs_to_param_dtype_hook)
+
+
 def resolve_attn_impl(requested: str, device: str) -> str:
     if requested == "auto":
         return "sdpa" if device == "cuda" else "eager"
@@ -306,6 +357,13 @@ def get_or_load(
     _fix_moss_model_config_token_ids(processor)
     if hasattr(processor, "audio_tokenizer") and processor.audio_tokenizer is not None:
         processor.audio_tokenizer = processor.audio_tokenizer.to(resolved_at_device)
+        # On cuda, cast Linear/Conv weights to the model's dtype but keep
+        # LayerNorm/RMSNorm/GroupNorm in fp32 — full fp16 made the decoder
+        # output silent. Saves ~3 GB VRAM vs full fp32 audio_tokenizer.
+        if resolved_at_device == "cuda":
+            _patch_audio_tokenizer_mixed_precision(
+                processor.audio_tokenizer, resolved_dtype
+            )
 
     if resolved_device == "cuda":
         torch.cuda.empty_cache()

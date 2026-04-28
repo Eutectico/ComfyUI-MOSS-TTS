@@ -112,3 +112,64 @@ def test_auto_dtype_collapses_with_explicit_on_same_device():
         e2 = model_state.get_or_load("x", "cpu", "fp32", "eager")
         assert e1 is e2
         assert MockModel.from_pretrained.call_count == 1
+
+
+class _MiniAudioTokenizer(__import__("torch").nn.Module):
+    """Minimal stand-in mixing Linear, Conv1d, and LayerNorm — enough to
+    exercise the mixed-precision logic without loading MOSS-TTS' full model.
+    """
+
+    def __init__(self):
+        super().__init__()
+        import torch
+        self.linear = torch.nn.Linear(4, 4)
+        self.conv = torch.nn.Conv1d(4, 4, kernel_size=1)
+        self.norm = torch.nn.LayerNorm(4)
+
+
+def test_mixed_precision_casts_linear_keeps_norm_fp32():
+    """audio_tokenizer cast to fp16, but LayerNorm stays fp32 to preserve
+    the precision normalization statistics need.
+    """
+    import torch
+    at = _MiniAudioTokenizer()
+    model_state._patch_audio_tokenizer_mixed_precision(at, torch.float16)
+    assert at.linear.weight.dtype == torch.float16
+    assert at.conv.weight.dtype == torch.float16
+    assert at.norm.weight.dtype == torch.float32
+
+
+def test_mixed_precision_hook_lets_fp32_input_flow_through_fp16_linear():
+    """End-to-end: an fp32 wav input survives a Linear with fp16 weights via
+    the dtype-cast pre-hook installed during patching.
+    """
+    import torch
+    at = _MiniAudioTokenizer()
+    model_state._patch_audio_tokenizer_mixed_precision(at, torch.float16)
+    inp_fp32 = torch.randn(2, 4, dtype=torch.float32)
+    out = at.linear(inp_fp32)
+    assert out.dtype == torch.float16
+
+
+def test_mixed_precision_hook_supplies_norm_with_fp32():
+    """fp16 hidden states reach the (fp32) norm: hook casts back to fp32."""
+    import torch
+    at = _MiniAudioTokenizer()
+    model_state._patch_audio_tokenizer_mixed_precision(at, torch.float16)
+    fp16_hidden = torch.randn(2, 4, dtype=torch.float16)
+    out = at.norm(fp16_hidden)
+    assert out.dtype == torch.float32
+
+
+def test_mixed_precision_skipped_when_audio_tokenizer_on_cpu():
+    """CPU path keeps the audio_tokenizer at default precision — fp16 ops
+    are slow on most CPUs and the VRAM concern doesn't apply off-GPU.
+    """
+    p, MockModel, MockProc = _patch_classes()
+    with p, patch("lib.model_state._patch_audio_tokenizer_mixed_precision") as mock_patch:
+        MockProc.from_pretrained.return_value = MagicMock()
+        MockModel.from_pretrained.return_value = MagicMock()
+        model_state.get_or_load(
+            "x", "cuda", "fp16", "sdpa", audio_tokenizer_device="cpu"
+        )
+        mock_patch.assert_not_called()
