@@ -133,6 +133,30 @@ def test_audio_tokenizer_cast_to_dtype_on_cuda():
         fake_at.to.assert_called_with("cuda", dtype=torch.float16)
 
 
+def test_dtype_cast_hook_aligns_fp32_input_with_fp16_layer():
+    """End-to-end: a Linear with fp16 weights normally errors on fp32 input,
+    but with the hook installed it casts the input and produces fp16 output.
+    """
+    import torch
+    layer = torch.nn.Linear(4, 4).to(torch.float16)
+    inp_fp32 = torch.randn(2, 4, dtype=torch.float32)
+    with pytest.raises(RuntimeError, match=r"expected scalar type"):
+        layer(inp_fp32)
+    model_state._patch_audio_tokenizer_dtype(layer)
+    out = layer(inp_fp32)
+    assert out.dtype == torch.float16
+
+
+def test_dtype_cast_hook_passes_through_matching_dtype():
+    """Hook is a no-op when input dtype already matches param dtype."""
+    import torch
+    layer = torch.nn.Linear(4, 4).to(torch.float16)
+    model_state._patch_audio_tokenizer_dtype(layer)
+    inp_fp16 = torch.randn(2, 4, dtype=torch.float16)
+    out = layer(inp_fp16)
+    assert out.dtype == torch.float16
+
+
 def test_audio_tokenizer_no_dtype_cast_on_cpu():
     """When the audio_tokenizer is on CPU, do not force fp16 — fp16 ops are
     slow on most CPUs and the VRAM concern doesn't apply off-GPU.
